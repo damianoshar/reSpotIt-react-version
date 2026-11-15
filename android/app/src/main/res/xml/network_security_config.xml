@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+  <!-- Dev build: cleartext HTTP allowed (LAN backends). The system and user CA
+       stores are trusted, so a user-installed local CA (mkcert) works. For
+       zero-touch installs, see src/personal/res/ (gitignored): it overlays a
+       trust anchor for the bundled local CA. -->
+  <base-config cleartextTrafficPermitted="true">
+    <trust-anchors>
+      <certificates src="system" />
+      <certificates src="user" />
+    </trust-anchors>
+  </base-config>
+</network-security-config>
