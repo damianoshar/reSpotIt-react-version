@@ -1,4 +1,4 @@
-//! Engine: owns the tokio runtime, the librespot session/player and the shared
+﻿//! Engine: owns the tokio runtime, the librespot session/player and the shared
 //! state Kotlin polls (playback state, position, last error).
 
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
@@ -27,7 +27,7 @@ pub const STATE_PLAYING: i32 = 2;
 pub const STATE_PAUSED: i32 = 3;
 pub const STATE_UNAVAILABLE: i32 = 4;
 
-/// librespot's desktop ("keymaster") client id — also its OAuth client id.
+/// librespot's desktop ("keymaster") client id β€” also its OAuth client id.
 ///
 /// Since Spotify's August 2026 change, the `login5` endpoint rejects playback
 /// credentials derived from an access token minted for a *different* client id

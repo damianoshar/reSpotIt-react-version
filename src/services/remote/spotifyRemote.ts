@@ -141,8 +141,8 @@ export async function followLibraryArtistsRemote(base: string): Promise<FollowAr
     base, '/api/v1/spotify/follow-artists', { method: 'POST' },
   );
   return {
-    total:          res.total          ?? 0,
+    total:            res.total            ?? 0,
     already_followed: res.already_followed ?? 0,
-    followed:       res.followed       ?? 0,
+    followed:         res.followed         ?? 0,
   };
 }

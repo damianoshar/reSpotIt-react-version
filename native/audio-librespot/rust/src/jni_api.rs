@@ -1,4 +1,4 @@
-//! JNI entry points for `com.spotifydashboard.librespot.LibrespotBridge`.
+﻿//! JNI entry points for `com.spotifydashboard.librespot.LibrespotBridge`.
 //!
 //! Handles are raw `Box<Engine>` pointers created in `nativeCreate` and freed
 //! exactly once in `nativeDestroy`. Every entry point catches panics so a Rust

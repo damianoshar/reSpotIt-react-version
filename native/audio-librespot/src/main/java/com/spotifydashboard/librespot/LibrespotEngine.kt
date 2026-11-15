@@ -1,4 +1,4 @@
-package com.spotifydashboard.librespot
+﻿package com.spotifydashboard.librespot
 
 import java.io.Closeable
 

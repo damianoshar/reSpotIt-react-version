@@ -6,7 +6,6 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { restoreLocalStorage, watchAppHide } from './services/dataVault';
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
-
 const render = () => {
   root.render(
     <React.StrictMode>

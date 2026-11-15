@@ -1,12 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { Concert } from '../services/DatabaseService';
-import { listConcerts, removeConcert, clearAllConcerts } from '../services/storage';
+import { getConcerts, deleteConcert, clearConcerts, type Concert } from '../services/DatabaseService';
 
 export interface ConcertsListDialogProps {
   open: boolean;
   onClose: () => void;
-  serverUrl: string;
-  isRemote: boolean;
 }
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -78,10 +75,7 @@ const ConcertCard: React.FC<ConcertCardProps> = ({ concert: c, onDelete, dimmed 
   );
 };
 
-export const ConcertsListDialog: React.FC<ConcertsListDialogProps> = ({
-  open, onClose, serverUrl, isRemote,
-}) => {
-  const ctx = { remote: isRemote, serverUrl };
+export const ConcertsListDialog: React.FC<ConcertsListDialogProps> = ({ open, onClose }) => {
   const [concerts, setConcerts] = useState<Concert[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -95,21 +89,21 @@ export const ConcertsListDialog: React.FC<ConcertsListDialogProps> = ({
 
   const load = async () => {
     setLoading(true); setError('');
-    try { setConcerts(await listConcerts(ctx)); }
+    try { setConcerts(await getConcerts()); }
     catch (e: any) { setError(e?.message ?? 'Could not load concerts.'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { if (open) void load(); }, [open, isRemote, serverUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) void load(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDelete = async (id: string) => {
-    try { await removeConcert(ctx, id); await load(); }
+    try { await deleteConcert(id); await load(); }
     catch (e: any) { setError(e?.message ?? 'Delete failed.'); }
   };
 
   const handleClear = async () => {
     if (!confirm('Delete all saved concerts?')) return;
-    try { await clearAllConcerts(ctx); setSelectedDate(null); await load(); }
+    try { await clearConcerts(); setSelectedDate(null); await load(); }
     catch (e: any) { setError(e?.message ?? 'Clear failed.'); }
   };
 

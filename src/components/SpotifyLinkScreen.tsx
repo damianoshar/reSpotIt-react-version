@@ -55,7 +55,7 @@ export const SpotifyLinkScreen: React.FC<Props> = ({ auth, onBack }) => {
         <h1 className="login-title">Connect Spotify</h1>
         <p className="login-subtitle">
           Link your Spotify account so the server can sync your saved albums.
-          Approve in the browser — you will be returned to the app automatically.
+          After approving in the browser, return here — the link is detected automatically.
         </p>
 
         {linkErr && (

@@ -6,15 +6,17 @@ real device with the release build.
 | | |
 |---|---|
 | Device | Xiaomi 2201117PG, Android 13, 1080 × 2400, 440 dpi |
-| Build | `release` APK (`app-release.apk`), media-server mode against the local server (`https://192.168.1.11:8000`) |
+| Build | `release` APK (`app-release.apk`), **local mode** — signed in with a Spotify account on the device |
 | Captured | 2026-11-10 |
 | App id | `com.spotifydashboard.app.ts` |
+| Branch | `feat/librespot-player` |
 
 All images live in [`screenshots/`](screenshots/).
 
-> The **librespot** variant of this app has the same screens; only the Player
-> tab differs (it adds the on-device librespot player). See the
-> `librespot-player` branch of `reSpotIt-react-version`.
+> This is the **librespot** variant of the app (branch `feat/librespot-player`).
+> Every screen is identical to the main React client — only the **Player** tab
+> differs: it adds the on-device librespot player on top of the Web Playback
+> SDK. See `reSpotIt-react-version` for the main client.
 
 ---
 
@@ -50,7 +52,8 @@ Sheet for one album with **Play album on Spotify**, **Add to playlist** and
 
 * **Play album on Spotify** hands the album to your **active Spotify device**
   (phone, speaker, TV — whatever you are listening on). It is *not* the
-  browser player: the Web Playback SDK has its own tab.
+  browser player and *not* the on-device player: the on-device librespot
+  player is on the Player tab.
 * **Local queue**: queue playlist, add album to end, queue next, reset queue.
 * Track list with title, artist, play time, and playlist position (when opened
   from a playlist). Each track shows a two-column action line:
@@ -186,23 +189,36 @@ of your existing playlists.
 
 ![Settings](screenshots/14-settings.png)
 
-*The screenshot predates the **Phone storage** card added in `v0.1.3`.*
+*The screenshot predates the **Phone storage** card added in `v0.1.3-librespot`.*
 
 * **Backup** — export the whole library to CSV, auto-backup after every sync and
   the sub-folder to use.
 * **Phone storage** — the data vault: the folder, the file count and the last
   save, **Save now**, and **Save to Documents** to grant *All files access*
-  (which also keeps a visible copy in `Documents/reSpotIt`). Sign-ins, settings
-  and the library are restored automatically after a reinstall.
+  (which also keeps a visible copy in `Documents/reSpotIt`). Sign-ins, settings,
+  the librespot credentials and the library are restored automatically after a
+  reinstall.
 * Grid size, sync photos, autohide the bottom navigation / the search & sort
   bar.
 * CSV import and export, hidden (duplicate) albums, playlist retention.
 * Media server (URL, sign-in, push/pull) and sign-out.
 
-## 15. Player
+## 15. Player (librespot)
 
 ![Player](screenshots/15-player.png)
 
+The only screen that differs from the main React client. Two players sit side
+by side:
+
+* **On this device** — the built-in **librespot** player (Rust/JNI). Switch it
+  **On** to play full tracks on the phone itself, without Spotify Connect:
+  * the first play opens Spotify's consent page — a **Premium** account is
+    required, and this login is independent from the dashboard login;
+  * **Keep connected** keeps the session alive in the background;
+  * transport controls (play / stop / next), the position and the current
+    track with its cover;
+  * *Forget playback account* clears the stored Spotify credentials,
+    *Audio settings* opens the librespot audio configuration.
 * **Web Playback SDK** — the official browser-based player: play/pause, volume,
   device picker and the playback-quality and keep-screen-on options.
 * **Now playing** with a refresh; the active device is shown.
@@ -223,6 +239,7 @@ kept per user on the server.
 ## Related documents
 
 * [`../README.md`](../README.md) — overview and installation.
+* [`LIBRESPOT.md`](LIBRESPOT.md) — on-device playback architecture and known gaps.
 * [`FEATURES.md`](FEATURES.md) — AI page capture and the phone-storage vault.
 * [`ARCHITECTURE.md`](ARCHITECTURE.md) — auth flow, data flow and source layout.
-* [`BUILD.md`](BUILD.md) — build steps and release signing.
+* [`BUILD.md`](BUILD.md) — build steps, native player and release signing.

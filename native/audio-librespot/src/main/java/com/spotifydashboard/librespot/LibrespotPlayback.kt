@@ -1,4 +1,4 @@
-package com.spotifydashboard.librespot
+﻿package com.spotifydashboard.librespot
 
 import android.content.Context
 import android.os.Build
@@ -13,9 +13,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * keeps them in app-private storage.
  *
  * Login order in [connect]:
- * 1. persisted reusable credentials → `loginStored` (silent, no expiry);
+ * 1. persisted reusable credentials • `loginStored` (silent, no expiry);
  * 2. otherwise (first run, or Spotify revoked the credentials) an interactive
- *    browser OAuth → `login` → the session's credentials are persisted.
+ *    browser OAuth • `login` • the session's credentials are persisted.
  *
  * Blocking: [connect] waits for the network and, on first run, the browser
  * round-trip. Call it from a worker thread (e.g. `Dispatchers.IO`), never from

@@ -3,11 +3,9 @@ import { Browser } from '@capacitor/browser';
 import {
   serverLogin, serverRegister, serverLogout,
   fetchServerAuthStatus, fetchSpotifyStatus, fetchSpotifyAuthUrl, disconnectSpotify,
-  importSpotifyToken, SpotifyLink, ServerUser,
+  SpotifyLink, ServerUser,
 } from '../services/remote/serverAuth';
 import { clearSession } from '../services/remote/apiClient';
-import { startAuthFlow } from '../services/SpotifyAuthService';
-import { getSpotifyClientId } from '../services/SpotifyCredentialsService';
 
 export type ServerAuthState = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -124,18 +122,9 @@ export function useServerAuth(serverUrl: string, enabled: boolean): ServerAuth {
   }, [serverUrl]);
 
   const openSpotifyLink = useCallback(async () => {
-    // Prefer the app's own PKCE flow. The server-issued URL redirects to the
-    // server's loopback callback, which is the phone itself on a LAN, and
-    // Spotify rejects non-loopback HTTP redirects.
-    if (getSpotifyClientId()) {
-      const tokens = await startAuthFlow();
-      await importSpotifyToken(serverUrl, tokens);
-      await refreshSpotifyStatus();
-      return;
-    }
     const url = await fetchSpotifyAuthUrl(serverUrl);
     await Browser.open({ url });
-  }, [serverUrl, refreshSpotifyStatus]);
+  }, [serverUrl]);
 
   const disconnectSpotifyAccount = useCallback(async () => {
     await disconnectSpotify(serverUrl);

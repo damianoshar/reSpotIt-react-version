@@ -1,4 +1,4 @@
-package com.spotifydashboard.librespot.playback
+﻿package com.spotifydashboard.librespot.playback
 
 import android.content.Context
 import android.media.AudioAttributes
@@ -217,6 +217,21 @@ class LocalPlaybackController private constructor(context: Context) {
                 if (_state.value.isPlaying && queue.isNotEmpty()) connectAndStart() else connectIdle()
             }
         }
+    }
+
+    /**
+     * User-initiated sign-in ("Sign in to Spotify" on the on-device card).
+     *
+     * Runs the same connect path as playback, which is where the Spotify
+     * consent page lives. No-op while a connect is already in flight.
+     */
+    fun signIn() {
+        if (!_state.value.enabled) {
+            _state.update { it.copy(error = "Turn on on-device playback first.") }
+            return
+        }
+        if (connectJob?.isActive == true) return
+        connectIdle()
     }
 
     private fun connectIdle() {

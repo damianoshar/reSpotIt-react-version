@@ -3,7 +3,7 @@
   "appName": "reSpotIt",
   "webDir": "dist",
   "server": {
-    "androidScheme": "http"
+    "androidScheme": "https"
   },
   "plugins": {
     "CapacitorSQLite": {

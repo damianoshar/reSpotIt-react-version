@@ -261,34 +261,13 @@ export async function startAuthFlow(): Promise<SpotifyTokens> {
   storePkce(_codeVerifier, _authState, redirectUri);
 
   return new Promise((resolve, reject) => {
-    let listenerHandle: { remove: () => void } | null = null;
-    const cleanup = () => {
-      if (listenerHandle) {
-        try { listenerHandle.remove(); } catch { /* ignore */ }
-        listenerHandle = null;
-      }
-    };
-
-    // If the user dismisses the Custom Tab (back button) without approving,
-    // reject instead of leaving the promise (and the "Opening…" UI) hanging.
-    Browser.addListener('browserFinished', () => {
-      if (_pendingCallback) {
-        _pendingCallback = null;
-        clearPkce();
-        cleanup();
-        reject(new Error('Login cancelled'));
-      }
-    }).then((h) => { listenerHandle = h; }).catch(() => {});
-
     // Set the callback BEFORE opening the browser
     _pendingCallback = async (rawUrl: string) => {
       try {
         await Browser.close().catch(() => {});
         devLog('[SpotifyAuth] Callback received');
-        cleanup();
         resolve(await completeAuthFromUrl(rawUrl));
       } catch (err) {
-        cleanup();
         reject(err);
       }
     };
@@ -296,7 +275,6 @@ export async function startAuthFlow(): Promise<SpotifyTokens> {
     Browser.open({ url: authUrl }).catch((err) => {
       _pendingCallback = null;
       clearPkce();
-      cleanup();
       reject(err);
     });
   });

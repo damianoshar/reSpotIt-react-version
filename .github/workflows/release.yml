@@ -51,10 +51,10 @@ jobs:
           keyPassword=$KS_KEY_PASSWORD
           EOF
         env:
-          KS_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KS_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
-          KS_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KS_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KS_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64_LIBRESPOT }}
+          KS_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD_LIBRESPOT }}
+          KS_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS_LIBRESPOT }}
+          KS_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD_LIBRESPOT }}
 
       - name: Make Gradle wrapper executable
         working-directory: android
@@ -74,7 +74,7 @@ jobs:
         id: signing
         if: startsWith(github.ref, 'refs/tags/')
         env:
-          KS_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64_LIBRESPOT }}
         run: |
           if [ -z "$KS_BASE64" ]; then
             echo "signed=false" >> "$GITHUB_OUTPUT"
@@ -90,3 +90,4 @@ jobs:
         with:
           files: android/app/build/outputs/apk/release/*.apk
           generate_release_notes: true
+

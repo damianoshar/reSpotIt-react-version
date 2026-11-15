@@ -39,7 +39,6 @@ export function useDataSource() {
   }, []);
 
   const setMode = useCallback((mode: DataSourceMode) => {
-    console.log('[useDataSource] setMode ->', mode);
     setSettings((prev) => {
       const next = { ...prev, mode };
       Preferences.set({ key: DATA_SOURCE_PREFS_KEY, value: JSON.stringify(next) });
@@ -49,7 +48,6 @@ export function useDataSource() {
 
   const setServerUrl = useCallback((serverUrl: string) => {
     const normalized = normalizeServerUrl(serverUrl);
-    console.log('[useDataSource] setServerUrl ->', serverUrl, 'normalized:', normalized);
     setSettings((prev) => {
       const next = { ...prev, serverUrl: normalized || DEFAULT_DATA_SOURCE.serverUrl };
       Preferences.set({ key: DATA_SOURCE_PREFS_KEY, value: JSON.stringify(next) });
@@ -59,14 +57,7 @@ export function useDataSource() {
 
   /** Probes {url}/health; resolves on OK, throws with a friendly message otherwise. */
   const testConnection = useCallback(async (url: string): Promise<void> => {
-    console.log('[useDataSource] testConnection ->', url);
-    try {
-      await checkServerHealth(url);
-      console.log('[useDataSource] testConnection OK');
-    } catch (e) {
-      console.error('[useDataSource] testConnection FAILED:', e);
-      throw e;
-    }
+    await checkServerHealth(url);
   }, []);
 
   return { settings, loaded, setMode, setServerUrl, testConnection, save };

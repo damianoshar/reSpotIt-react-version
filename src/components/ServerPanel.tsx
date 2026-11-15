@@ -74,7 +74,8 @@ export const ServerPanel: React.FC<Props> = ({
                    onKeyDown={(e) => e.key === 'Enter' && handleServerUrlBlur()} />
             {Capacitor.isNativePlatform() && (
               <p className="sync-desc" style={{ marginTop: '0.35rem' }}>
-                LAN HTTP is allowed in this build. Enter http://PC-IP:8001
+                On Android, use an HTTPS URL, or adb reverse with
+                {' '}http://127.0.0.1:8000 (LAN HTTP is blocked).
               </p>
             )}
           </div>

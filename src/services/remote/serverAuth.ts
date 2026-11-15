@@ -79,26 +79,3 @@ export async function fetchSpotifyAuthUrl(base: string): Promise<string> {
 export async function disconnectSpotify(base: string): Promise<void> {
   await apiFetch(base, '/api/v1/auth/spotify', { method: 'DELETE' });
 }
-
-/**
- * Hand tokens produced by the app's own PKCE flow to the server.
- *
- * The server's OAuth callback is a loopback URL (127.0.0.1:8888); on a phone
- * that resolves to the phone itself, and Spotify refuses non-loopback HTTP
- * redirects. So the app authorises with its custom-scheme redirect and the
- * server stores the resulting tokens for this account.
- */
-export async function importSpotifyToken(
-  base: string,
-  tokens: { access_token: string; refresh_token: string; expires_at: number },
-): Promise<void> {
-  const expiresIn = Math.max(0, Math.round((tokens.expires_at - Date.now()) / 1000));
-  await apiFetch(base, '/api/v1/auth/spotify/token', {
-    method: 'POST',
-    body: {
-      access_token:  tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expires_in:    expiresIn,
-    },
-  });
-}

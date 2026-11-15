@@ -47,11 +47,11 @@ public class MainActivity extends BridgeActivity {
         if (intent == null) return;
         String shared = intent.getStringExtra(Intent.EXTRA_TEXT);
         if (shared == null || shared.trim().isEmpty()) return;
-        // Defer until the bridge (and plugins) are ready.
+        final String url = shared.trim();
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
                 AddFromSitePlugin plugin = (AddFromSitePlugin) getBridge().getPlugin("AddFromSite").getInstance();
-                if (plugin != null) plugin.openFromShare(shared.trim());
+                if (plugin != null) plugin.openFromShare(url);
             } catch (Exception e) {
                 android.util.Log.e("MainActivity", "share handling failed", e);
             }

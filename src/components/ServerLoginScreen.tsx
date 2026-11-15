@@ -140,8 +140,8 @@ export const ServerLoginScreen: React.FC<Props> = ({ auth, serverUrl, onSetServe
             onChange={(e) => { setUrlDraft(e.target.value); setUrlError(null); }}
           />
           <p className="login-note" style={{ textAlign: 'left', margin: '0 0 0.6rem' }}>
-            Wi-Fi: https://PC-IP:8002 (install mkcert CA first) or
-            http://PC-IP:8002 for a non-TLS server.
+            USB: http://127.0.0.1:8000 with adb reverse. Wi-Fi: use an HTTPS
+            address — Android blocks cleartext HTTP to LAN addresses.
           </p>
           {urlError && (
             <div className="sync-error" role="alert" style={{ marginBottom: '0.6rem', width: '100%' }}>

@@ -1,9 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  listLLMChats,
-  deleteLLMChat,
-  type LLMChatSummary,
-} from '../services/LLMService';
 import { resolveArtists } from '../services/remote/spotifyRemote';
 import {
   startRemoteConcertScan,
@@ -13,8 +8,7 @@ import {
   type RemoteConcertScan,
   type RemoteConcertScanItem,
 } from '../services/remote/concertScansRemote';
-import { type Concert } from '../services/DatabaseService';
-import { saveConcerts } from '../services/storage';
+import { upsertConcerts, type Concert } from '../services/DatabaseService';
 import { isNativeApp, openConcertPageSnapshot } from '../services/addFromSite';
 import { LinkHistory } from './LinkHistory';
 import { recordRecent } from '../services/linkHistory';
@@ -23,7 +17,6 @@ export interface ConcertsDialogProps {
   open: boolean;
   onClose: () => void;
   serverUrl: string;
-  isRemote: boolean;
   onSaved?: (count: number) => void;
 }
 
@@ -37,9 +30,7 @@ interface ConcertRow {
   selected: boolean;
 }
 
-export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
-  open, onClose, serverUrl, isRemote, onSaved,
-}) => {
+export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({ open, onClose, serverUrl, onSaved }) => {
   const [url, setUrl] = useState('');
   const [pasteText, setPasteText] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -52,10 +43,6 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [resultMessage, setResultMessage] = useState('');
-  const [chatId, setChatId] = useState<string | null>(null);
-  const [chats, setChats] = useState<LLMChatSummary[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
   // Default to correlating the scan with the user's followed Spotify artists.
   const [followedOnly, setFollowedOnly] = useState(true);
   // Click-and-forget background scan (server-side) whose results wait for review.
@@ -71,7 +58,7 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
       return;
     }
     if (next.status !== 'ready') {
-      setResultMessage(next.message || 'Scanning in the background…');
+      setResultMessage(next.message || 'Scanning in the background...');
       return;
     }
     const items: RemoteConcertScanItem[] = next.items ?? [];
@@ -130,24 +117,6 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
     const timer = window.setInterval(() => { void loadLatestScan(); }, 4000);
     return () => window.clearInterval(timer);
   }, [open, serverUrl, scan?.status, loadLatestScan]);
-
-  // Load chat history on mount
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setHistoryLoading(true);
-    listLLMChats(serverUrl, 'extract_concerts')
-      .then((rows) => {
-        if (!cancelled) {
-          setChats(rows);
-          setHistoryLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setHistoryLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [open, serverUrl]);
 
   if (!open) return null;
 
@@ -239,7 +208,7 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
         followed: false,
         created_at: new Date().toISOString(),
       };
-      await saveConcerts({ remote: isRemote, serverUrl }, [concert]);
+      await upsertConcerts([concert]);
       onSaved?.(1);
       setResultMessage('Saved 1 concert.');
       setManualArtist(''); setManualDate(''); setManualVenue(''); setManualUrl('');
@@ -272,7 +241,7 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
         followed: r.followed,
         created_at: new Date().toISOString(),
       }));
-      await saveConcerts({ remote: isRemote, serverUrl }, concerts);
+      await upsertConcerts(concerts);
       // The scan is reviewed and saved: dismiss it so it does not reappear.
       if (scan) {
         try { await deleteRemoteConcertScan(serverUrl, scan.id); } catch { /* best-effort */ }
@@ -298,34 +267,6 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
     setError(''); setResultMessage('');
   };
 
-  const loadChat = async (chatId: string) => {
-    setHistoryLoading(true);
-    try {
-      setChatId(chatId);
-      setShowHistory(false);
-    } catch (e) {
-      console.error('Failed to load chat:', e);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  const deleteChat = async (chatId: string) => {
-    try {
-      await deleteLLMChat(serverUrl, chatId);
-      setChats((prev) => prev.filter((c) => c.id !== chatId));
-    } catch (e: any) {
-      console.error('Failed to delete chat:', e);
-    }
-  };
-
-  const startNewChat = () => {
-    setChatId(null);
-    setRows([]);
-    setUnresolved([]);
-    setShowHistory(false);
-  };
-
   // Correlation helpers: what the user sees and can save under the current filter.
   const followedCount = rows.filter((r) => r.followed).length;
   const visibleRows = rows
@@ -344,56 +285,8 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
               with the artists you follow on Spotify; the list defaults to your followed artists.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button
-              type="button"
-              className="url-btn"
-              onClick={() => { setShowHistory(!showHistory); if (showHistory) setChats([]); }}
-              disabled={historyLoading}
-            >
-              {showHistory ? 'Hide scans' : `Scans (${chats.length})`}
-            </button>
-            <button className="modal-close" type="button" onClick={onClose} aria-label="Close">✕</button>
-          </div>
+          <button className="modal-close" type="button" onClick={onClose} aria-label="Close">✕</button>
         </div>
-
-        {showHistory && (
-          <div className="ai-chats" style={{ marginBottom: 12, padding: 8, border: '1px solid #333', borderRadius: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <strong>Recent concert scans</strong>
-              <button type="button" className="url-btn" onClick={startNewChat} disabled={historyLoading}>
-                + New scan
-              </button>
-            </div>
-            {historyLoading && <p style={{ opacity: 0.7 }}>Loading…</p>}
-            {chats.length === 0 && !historyLoading && <p style={{ opacity: 0.7 }}>No previous scans yet.</p>}
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: 160, overflowY: 'auto' }}>
-              {chats.map((c) => (
-                <li key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid #222' }}>
-                  <button
-                    type="button"
-                    className="url-btn"
-                    onClick={() => loadChat(c.id)}
-                    disabled={historyLoading}
-                    style={{ flex: 1, textAlign: 'left', fontWeight: c.id === chatId ? 700 : 400 }}
-                  >
-                    {(c.title ?? '').trim() || '(untitled)'}
-                  </button>
-                  <button
-                    type="button"
-                    className="url-btn"
-                    onClick={() => deleteChat(c.id)}
-                    disabled={historyLoading}
-                    aria-label="Delete scan"
-                    style={{ marginLeft: 8 }}
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
 
         {serverUrl ? (
           <div className="add-from-site-toolbar">
@@ -406,7 +299,7 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
             />
             <textarea
               className="form-input"
-              placeholder="…or paste page text here"
+              placeholder="...or paste page text here"
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
               disabled={scanning}
@@ -430,6 +323,9 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
               onChange={(e) => void handleFileSelected(e)}
               disabled={scanning}
             />
+            <button type="button" className="sync-btn" onClick={() => void handleScan()} disabled={scanning || (!url.trim() && !pasteText.trim())}>
+              {scanning ? 'Scanning...' : 'Scan with AI'}
+            </button>
             <button
               type="button"
               className="sync-btn"
@@ -437,7 +333,7 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
               disabled={scanning}
               title="Upload a .txt, .md or .html file (max 5 MB)"
             >
-              {scanning ? 'Uploading…' : 'Attach file'}
+              {scanning ? 'Uploading...' : 'Attach file'}
             </button>
             {isNativeApp() && (
               <button
@@ -450,9 +346,6 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
                 Open in browser and scan
               </button>
             )}
-            <button type="button" className="sync-btn" onClick={() => void handleScan()} disabled={scanning || (!url.trim() && !pasteText.trim())}>
-              {scanning ? 'Scanning…' : 'Scan with AI'}
-            </button>
           </div>
         ) : (
           <div className="add-from-site-toolbar">
@@ -461,7 +354,7 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
             <input className="form-input" placeholder="Venue (optional)" value={manualVenue} onChange={(e) => setManualVenue(e.target.value)} />
             <input className="form-input" placeholder="URL (optional)" value={manualUrl} onChange={(e) => setManualUrl(e.target.value)} />
             <button type="button" className="sync-btn" onClick={() => void handleManualSave()} disabled={saving || !manualArtist.trim()}>
-              {saving ? 'Saving…' : 'Save concert'}
+              {saving ? 'Saving...' : 'Save concert'}
             </button>
           </div>
         )}
@@ -533,7 +426,7 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
                     <input type="checkbox" checked={r.selected} onChange={() => toggle(i)} />
                   </label>
                   <span className="list-card__main">
-                    <span className="list-card__artist">{r.artist}</span>
+                    <span className="list-card__title">{r.artist}</span>
                     <span className="list-card__meta">
                       {[r.date || 'date unknown', r.venue].filter(Boolean).join(' · ')}
                     </span>
@@ -544,7 +437,7 @@ export const ConcertsDialog: React.FC<ConcertsDialogProps> = ({
             </ul>
             <div className="add-from-site-footer">
               <button type="button" className="sync-btn" onClick={() => void handleSave()} disabled={saving || selectedVisible.length === 0}>
-                {saving ? 'Saving…' : `Save ${selectedVisible.length} concert(s)`}
+                {saving ? 'Saving...' : `Save ${selectedVisible.length} concert(s)`}
               </button>
               <button type="button" className="sync-btn sync-btn--ghost" onClick={onClose}>Close</button>
             </div>

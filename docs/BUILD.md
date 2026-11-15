@@ -1,6 +1,6 @@
-# Build & Release — React client
+# Build & Release — React librespot client
 
-Everything needed to build the APK, sign it and let CI publish it.
+Everything needed to build the APK (including the native player), sign it and let CI publish it.
 
 ---
 
@@ -21,12 +21,14 @@ Everything needed to build the APK, sign it and let CI publish it.
 
 ---
 
-## 🚀 Setup
+## 🛠 Build from Source
 
 ### Prerequisites
 - Node.js 18+
 - JDK 17 + Android SDK (platform 34, build-tools 34.0.0)
 - Android Studio (optional — the CLI works)
+- **Rust toolchain + `cargo-ndk` + Android NDK 26.2** (only if you rebuild the native player)
+- Spotify Developer account
 
 ### 1 — Install dependencies
 ```bash
@@ -38,25 +40,33 @@ npm install
 npm run sync        # = npm run build (tsc --noEmit && vite build) && npx cap sync android
 ```
 
-> **Note:** the `android/` platform is **already committed** to this repository (59 files). Do **not** run `npx cap add android` — Capacitor will refuse to add a platform that already exists.
-> There is also **no `android-patches/` folder** in this repository: the manifest, `MainActivity` and the network security config are already in place under `android/app/src/main/`. (The Kotlin repo has an `android-patches/` folder; this one does not.)
+> **Note:** the `android/` platform is **already committed** to this repository. Do **not** run `npx cap add android` — Capacitor refuses to add a platform that already exists.
+> There is **no `android-patches/` folder** here: the manifest, `MainActivity` and the network security config are already in place under `android/app/src/main/`.
 
-### 3 — Build the APK
+### 3 — Build the native librespot player (only if the `.so` files are missing)
+```powershell
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+$env:ANDROID_NDK_HOME = "$env:LOCALAPPDATA\Android\Sdk\ndk\26.2.11394342"
+Set-Location native/audio-librespot/rust
+cargo ndk -t arm64-v8a -t armeabi-v7a -t x86 -t x86_64 --platform 24 `
+  -o ../src/main/jniLibs build --release
+```
+
+Output: `native/audio-librespot/src/main/jniLibs/<abi>/libspotify_librespot.so` (git-ignored). All four ABIs are needed for the phone/tablet matrix — `armeabi-v7a` (older Neffos/Lenovo), `arm64-v8a` (TCL/Xiaomi and most modern phones), `x86`/`x86_64` (emulators).
+
+`cargo build --target aarch64-linux-android` alone is **not** enough: it neither produces the JNI-wrapped library nor populates `jniLibs`.
+
+### 4 — Build the APK
 ```bash
 cd android
 ./gradlew assembleDebug      # -> android/app/build/outputs/apk/debug/app-debug.apk
 ./gradlew assembleRelease    # -> android/app/build/outputs/apk/release/app-release.apk
 ```
 
-### 4 — Run in the IDE
+### 5 — Run in the IDE
 ```bash
 npm run open:android         # = npx cap open android
 # Press Run, or Build -> Build APK(s)
-```
-
-### 5 — Install on a device
-```bash
-adb install -r android/app/build/outputs/apk/release/app-release.apk
 ```
 
 ---

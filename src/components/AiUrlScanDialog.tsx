@@ -1,19 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Papa from 'papaparse';
-import {
-  extractAlbumsFromUrl,
-  extractAlbumsFromText,
-  type ExtractedAlbum,
-  listLLMChats,
-  createLLMChat,
-  chatWithLLM,
-  storedChatTurns,
-  deleteLLMChat,
-  type LLMChatSummary,
-  type LLMChatRow,
-  type LLMMessage,
-  type LLMChatResult,
-} from '../services/LLMService';
+import { extractAlbumsFromUrl, extractAlbumsFromText, type ExtractedAlbum } from '../services/LLMService';
 import { resolveAlbums, type ResolvedAlbum } from '../services/remote/spotifyRemote';import type { SyncResult } from '../services/SyncService';
 import { isNativeApp, openAlbumPageSnapshot } from '../services/addFromSite';
 import type { PlaylistAlbumLike } from '../types';
@@ -95,10 +82,6 @@ export const AiUrlScanDialog: React.FC<AiUrlScanDialogProps> = ({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [resultMessage, setResultMessage] = useState('');
-  const [chatId, setChatId] = useState<string | null>(null);
-  const [chats, setChats] = useState<LLMChatSummary[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
   // Playlist target for the found albums: a new playlist with a name the user
   // chooses, or one of the playlists they already have.
   const [playlistName, setPlaylistName] = useState('');
@@ -106,29 +89,11 @@ export const AiUrlScanDialog: React.FC<AiUrlScanDialogProps> = ({
   const [playlists, setPlaylists] = useState<{ id: string; name: string }[]>([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
 
-  // Load chat history on mount
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setHistoryLoading(true);
-    listLLMChats(serverUrl, 'extract_albums')
-      .then((rows) => {
-        if (!cancelled) {
-          setChats(rows);
-          setHistoryLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setHistoryLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [open, serverUrl]);
-
   if (!open) return null;
 
   const reset = () => {
     setUrl(''); setPasteText(''); setAlbums([]); setUnresolved([]); setSelected(new Set());
-    setError(''); setResultMessage(''); setChatId(null);
+    setError(''); setResultMessage('');
     setPlaylistName(''); setPlaylistTarget(''); setPlaylists([]);
   };
 
@@ -139,13 +104,9 @@ export const AiUrlScanDialog: React.FC<AiUrlScanDialogProps> = ({
       if (url.trim()) recordRecent(historyKind, url.trim(), 'url');
       else if (pasteText.trim()) recordRecent(historyKind, pasteText.trim(), 'text');
       if (serverUrl) {
-        const scan = url.trim()
+        const extracted = url.trim()
           ? await extractAlbumsFromUrl(serverUrl, url.trim())
           : await extractAlbumsFromText(serverUrl, pasteText.trim());
-        const extracted = scan.albums;
-        // The server logs the scan in an Open WebUI chat; keep its id so the
-        // follow-up turn lands in that same chat.
-        if (scan.chatId) setChatId(scan.chatId);
         if (!extracted.length) {
           setError('AI found no albums on this page.');
           setAlbums([]); setUnresolved([]);
@@ -192,15 +153,13 @@ export const AiUrlScanDialog: React.FC<AiUrlScanDialogProps> = ({
     try {
       const snap = await openAlbumPageSnapshot(url.trim());
       if (!snap) return; // the user closed the browser
-      recordRecent(serverUrl ? 'albums-ai' : 'albums-paste', snap.url || url.trim(), 'url');
+      recordRecent('albums-ai', snap.url || url.trim(), 'url');
       const text = snap.text.trim();
       if (!text) {
         setError('The page had no readable text. Wait for it to finish loading, then try again.');
         return;
       }
-      const scan = await extractAlbumsFromText(serverUrl, text);
-      const extracted = scan.albums;
-      if (scan.chatId) setChatId(scan.chatId);
+      const extracted = await extractAlbumsFromText(serverUrl, text);
       if (!extracted.length) {
         setError('AI found no albums on this page.');
         return;
@@ -228,18 +187,6 @@ export const AiUrlScanDialog: React.FC<AiUrlScanDialogProps> = ({
 
   const selectedAlbums = albums.filter((a) => selected.has(a.spotify_id));
 
-  // Build context for LLM chat (for future refine/resume)
-  const buildContext = (albs: ResolvedAlbum[]) => {
-    const lines: string[] = [];
-    if (albs.length) {
-      lines.push('Albums extracted from page:');
-      albs.slice(0, 50).forEach((a) => {
-        lines.push(`- ${a.title} — ${a.artist_name} (${a.year ? a.year : 'unknown year'})`);
-      });
-    }
-    return lines.join('\n');
-  };
-
   const handleSave = async () => {
     if (!selectedAlbums.length) return;
     setImporting(true); setError(''); setResultMessage('');
@@ -265,10 +212,6 @@ export const AiUrlScanDialog: React.FC<AiUrlScanDialogProps> = ({
       const message = saved
         ? `Saved ${saved} album(s) to your Spotify library. Imported ${result.imported}, skipped ${result.skipped}, existing ${result.existing}.`
         : `Imported ${result.imported}, skipped ${result.skipped}, existing ${result.existing}.`;
-      // Persist chat BEFORE closing dialog (onImported closes it)
-      await persistScanChat(saved
-        ? `Saved ${selectedAlbums.length} album(s) to Spotify and the library.`
-        : `Saved ${selectedAlbums.length} album(s) to the library.`);
       onImported(result, message);
       setResultMessage(message);
     } catch (e: any) {
@@ -311,14 +254,11 @@ export const AiUrlScanDialog: React.FC<AiUrlScanDialogProps> = ({
         const tracksAdded = await onAddToPlaylist(existing, selectedAlbums);
         const name = playlists.find((p) => p.id === existing)?.name ?? 'playlist';
         onPlaylistCreated?.(name);
-        await persistScanChat(`Added ${selectedAlbums.length} album(s) to "${name}".`);
         setResultMessage(`Added ${selectedAlbums.length} album(s) to “${name}” (${tracksAdded} tracks).`);
       } else {
         if (!onCreatePlaylist) throw new Error('Creating a playlist is not available here.');
         const res = await onCreatePlaylist(newName, selectedAlbums);
         onPlaylistCreated?.(res.name || newName);
-        // Persist chat after playlist creation
-        await persistScanChat(`Created playlist with ${selectedAlbums.length} album(s).`);
         setResultMessage(`Created playlist “${res.name || newName}” with ${res.tracksAdded} tracks.`);
       }
     } catch (e: any) {
@@ -326,64 +266,6 @@ export const AiUrlScanDialog: React.FC<AiUrlScanDialogProps> = ({
     } finally {
       setCreating(false);
     }
-  };
-
-  // Save the scan results as a chat turn (for history/resume)
-  const persistScanChat = async (userPrompt: string) => {
-    if (!serverUrl) return;
-    const context = buildContext(selectedAlbums);
-    const systemPrompt =
-      'You are a music library assistant. The user scanned a page for albums. ' +
-      'The extracted albums are listed below. You can help them refine the selection, ' +
-      'create playlists, or answer questions about the albums.';
-    try {
-      const result = await chatWithLLM(serverUrl, [
-        { role: 'system', content: systemPrompt + '\n\nAlbums:\n' + context },
-        { role: 'user', content: userPrompt },
-      ], {
-        system: systemPrompt + '\n\nAlbums:\n' + context,
-        chat_id: chatId,
-        use_history: true,
-        history_limit: 20,
-        persist: true,
-        use_tools: false,
-        temperature: 0.3,
-        max_tokens: 512,
-        chat_type: 'extract_albums',
-      });
-      if (result.chat_id) setChatId(result.chat_id);
-    } catch (e: any) {
-      console.warn('Could not persist scan chat:', e);
-    }
-  };
-
-  const loadChat = async (chatId: string) => {
-    setHistoryLoading(true);
-    try {
-      // In a full implementation, we'd load the chat and populate albums from it
-      // For now, just set the chatId
-      setChatId(chatId);
-      setShowHistory(false);
-    } catch (e) {
-      console.error('Failed to load chat:', e);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  const deleteChat = async (chatId: string) => {
-    try {
-      await deleteLLMChat(serverUrl, chatId);
-      setChats((prev) => prev.filter((c) => c.id !== chatId));
-    } catch (e: any) {
-      console.error('Failed to delete chat:', e);
-    }
-  };
-
-  const startNewChat = () => {
-    setChatId(null);
-    reset();
-    setShowHistory(false);
   };
 
   return (
@@ -396,56 +278,8 @@ export const AiUrlScanDialog: React.FC<AiUrlScanDialogProps> = ({
               Paste a URL (or text) without Spotify links. AI extracts albums, then searches Spotify.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button
-              type="button"
-              className="url-btn"
-              onClick={() => { setShowHistory(!showHistory); if (showHistory) setChats([]); }}
-              disabled={historyLoading}
-            >
-              {showHistory ? 'Hide scans' : `Scans (${chats.length})`}
-            </button>
-            <button className="modal-close" type="button" onClick={onClose} aria-label="Close">✕</button>
-          </div>
+          <button className="modal-close" type="button" onClick={onClose} aria-label="Close">✕</button>
         </div>
-
-        {showHistory && (
-          <div className="ai-chats" style={{ marginBottom: 12, padding: 8, border: '1px solid #333', borderRadius: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <strong>Recent album scans</strong>
-              <button type="button" className="url-btn" onClick={startNewChat} disabled={historyLoading}>
-                + New scan
-              </button>
-            </div>
-            {historyLoading && <p style={{ opacity: 0.7 }}>Loading…</p>}
-            {chats.length === 0 && !historyLoading && <p style={{ opacity: 0.7 }}>No previous scans yet.</p>}
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: 160, overflowY: 'auto' }}>
-              {chats.map((c) => (
-                <li key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid #222' }}>
-                  <button
-                    type="button"
-                    className="url-btn"
-                    onClick={() => loadChat(c.id)}
-                    disabled={historyLoading}
-                    style={{ flex: 1, textAlign: 'left', fontWeight: c.id === chatId ? 700 : 400 }}
-                  >
-                    {(c.title ?? '').trim() || '(untitled)'}
-                  </button>
-                  <button
-                    type="button"
-                    className="url-btn"
-                    onClick={() => deleteChat(c.id)}
-                    disabled={historyLoading}
-                    aria-label="Delete scan"
-                    style={{ marginLeft: 8 }}
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
 
         <div className="add-from-site-toolbar">
           <input

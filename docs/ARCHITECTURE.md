@@ -1,4 +1,4 @@
-# Architecture — React client
+# Architecture — React librespot client
 
 How the app is wired: authentication, data flow and the source layout.
 
@@ -42,6 +42,11 @@ DatabaseService.upsertAlbum()     →  SQLite
       ↓
 useLibrary → React UI
 
+On-device playback:
+  AlbumTrackSheet → services/librespotPlayer.ts → LibrespotPlayerPlugin (Capacitor)
+      → LibrespotBridge → LibrespotEngine → PcmPlayer → AudioTrack
+      ↘ LocalPlaybackService (foreground media service)
+
 Media-server mode:
   Server (FastAPI)  ⇄  services/remote/*  →  SQLite (push/pull)
                               ↓
@@ -56,7 +61,7 @@ Media-server mode:
 src/
 ├── config/spotify.ts            ← Client ID, scopes, redirect URIs
 ├── App.tsx                      ← Root component, tab router, tool wiring
-├── components/                  ← 38 components
+├── components/                  ← 39 components (38 + LocalPlaybackCard.tsx)
 │   ├── LoginScreen.tsx / SpotifyCredentialsScreen.tsx / ServerLoginScreen.tsx
 │   ├── Header.tsx / StatsBar.tsx / StatsPanel.tsx / FilterBar.tsx
 │   ├── AlbumGrid.tsx / AlbumCard.tsx / AlbumTrackSheet.tsx / Artwork.tsx
@@ -64,49 +69,51 @@ src/
 │   ├── PlaylistModal.tsx / PlaylistPicker.tsx / PlaylistDashboardView.tsx
 │   ├── AddFromSiteDialog.tsx    ← in-app browser (WebView) + link/page snapshot
 │   ├── AiUrlScanDialog.tsx      ← "Scan page with AI (albums)"
-│   ├── ConcertsDialog.tsx / ConcertsListDialog.tsx / ConcertScanRow.tsx
+│   ├── ConcertsDialog.tsx / ConcertsListDialog.tsx
 │   ├── AIAssistantDialog.tsx
 │   ├── DuplicatesDialog.tsx / RetentionDialog.tsx / LinkHistory.tsx
 │   ├── BackupPanel.tsx / ServerPanel.tsx / SettingsView.tsx
 │   ├── PhoneStoragePanel.tsx    ← vault status, "All files access", manual save
 │   ├── PlayerView.tsx / WebPlaybackSdkPlayer.tsx
-│   └── EmptyState.tsx / ErrorBoundary.tsx / SelectionToolbar.tsx
+│   └── LocalPlaybackCard.tsx    ← on-device librespot player UI (this variant only)
 ├── services/
-│   ├── SpotifyAuthService.ts    ← PKCE flow, token exchange, refresh, storage
-│   ├── SpotifyApiService.ts     ← saved albums + artist genres (paginated)
-│   ├── SpotifyCatalogService.ts / SpotifyPlaylistService.ts / SpotifyPlaylistFeedService.ts
+│   ├── librespotPlayer.ts       ← Capacitor bridge to LibrespotPlayerPlugin
+│   ├── playbackTuning.ts        ← battery-optimisation / keep-screen-on prompts
+│   ├── dataVault.ts             ← vault bridge + localStorage mirror
+│   ├── SpotifyAuthService.ts / SpotifyApiService.ts / SpotifyCatalogService.ts
+│   ├── SpotifyPlaylistService.ts / SpotifyPlaylistFeedService.ts
 │   ├── SpotifyPlaybackService.ts / WebPlaybackSdkService.ts
 │   ├── DatabaseService.ts / PlaylistDatabaseService.ts / webSqlite.ts
 │   ├── SyncService.ts / ExportService.ts / LLMService.ts / addFromSite.ts
 │   ├── linkHistory.ts / PlaylistRetentionService.ts / QueuePlaylistStore.ts
-│   ├── playbackTuning.ts / librespotPlayer.ts / SpotifyCredentialsService.ts
-│   ├── dataVault.ts             ← vault bridge + localStorage mirror
 │   ├── remote/                  ← media-server client (apiClient, libraryRemote,
 │   │                              playlistRemote, concertsRemote, concertScansRemote,
 │   │                              duplicatesRemote, retentionRemote, serverAuth, spotifyRemote)
-│   └── storage/                 ← filesystem/storage helpers
+│   └── storage/
 ├── hooks/                       ← useSpotifyAuth, useLibrary, useDataSource, useServerAuth,
 │                                  usePlayerQueue, usePlaylistDashboard, useSelection,
 │                                  useBackupSettings, useLocalPlayback, useToast
 ├── contexts/SyncPhotosContext.tsx
 ├── types/index.ts
 ├── utils/                       ← duplicateFinder, catalogDuplicates, playlistListOptions,
-│                                  playlistPlayback, queueSnapshot, activeQueuePlanner,
-│                                  duplicateBlocklist, spotifyFetch, spotifyLinks, syncHistory, debounce
+│                                  playlistPlayback, queueSnapshot, activeQueuePlanner, …
 ├── styles/global.css
 └── config/spotify.ts
 
 android/                          ← committed Capacitor project (59 files)
 ├── app/src/main/java/com/spotifydashboard/app/
-│   ├── MainActivity.java        ← registers the Capacitor plugins + vault restore/backup
+│   ├── MainActivity.java        ← registers the Capacitor plugins (incl. LibrespotPlayerPlugin) + vault restore/backup
 │   ├── AddFromSitePlugin.java   ← in-app browser bridge (link scan + page snapshot)
 │   ├── PlaybackTuningPlugin.java← battery-optimisation / keep-screen-on prompts
 │   ├── DataVault.java           ← mirrors shared_prefs, databases, files into the public folder
 │   └── DataVaultPlugin.java     ← Capacitor plugin: status / save / openAccessSettings
 └── app/src/main/res/xml/network_security_config.xml
 
-native/audio-librespot/           ← Rust/JNI librespot module (present on this branch,
-                                   the on-device player UI lives on librespot-player)
+native/audio-librespot/           ← Rust/JNI module (Gradle project :audio-librespot)
+├── rust/                        ← librespot 0.8 crate + vendor patches
+├── src/main/java/com/spotifydashboard/librespot/
+├── src/main/jniLibs/<abi>/libspotify_librespot.so   ← git-ignored build output
+└── build.gradle
 docs/                            ← landing-page assets + SCREENS.md (screen guide with screenshots)
 docs/screenshots/                ← device screenshots used by the screen guide
 ```

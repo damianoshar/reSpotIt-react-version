@@ -1,9 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-  <!-- Dev build: cleartext HTTP allowed (LAN backends). The system and user CA
-       stores are trusted, so a user-installed local CA (mkcert) works. For
-       zero-touch installs, see src/personal/res/ (gitignored): it overlays a
-       trust anchor for the bundled local CA. -->
+  <!-- Dev build: cleartext HTTP allowed (LAN backends) AND the mkcert local CA
+       installed on the device is trusted, so the self-hosted HTTPS media
+       server (https://192.168.1.11) is accepted by the app + WebView. -->
   <base-config cleartextTrafficPermitted="true">
     <trust-anchors>
       <certificates src="system" />

@@ -6,8 +6,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    // Android 7 devices ship Chrome 64, which cannot parse `?.` or `??`.
-    // Vite's default target emits them, so the WebView renders a blank page.
+    // Android 7 devices can fall back to a factory Chrome 64 WebView, which
+    // cannot parse `?.`/`??` (Chrome 80+). Targeting es2017 keeps the bundle
+    // loadable there instead of rendering a black screen.
     target: 'es2017',
   },
   server: {

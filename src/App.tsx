@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header }                from './components/Header';
 import { StatsBar }              from './components/StatsBar';
 import { FilterBar }             from './components/FilterBar';
@@ -25,11 +25,12 @@ import { AddFromSiteDialog }  from './components/AddFromSiteDialog';
 import { AiUrlScanDialog }    from './components/AiUrlScanDialog';
 import { AiTrackScanDialog } from './components/AiTrackScanDialog';
 import { ConcertsDialog }     from './components/ConcertsDialog';
-import { ConcertsListDialog } from './components/ConcertsListDialog';import { AIAssistantDialog }  from './components/AIAssistantDialog';
+import { ConcertsListDialog } from './components/ConcertsListDialog';
+import { AIAssistantDialog }  from './components/AIAssistantDialog';
 import { ArtistDiscographyDialog } from './components/ArtistDiscographyDialog';
 import { findDuplicates }         from './utils/duplicateFinder';
 import type { DuplicateGroup, DuplicateAlbum } from './utils/duplicateFinder';
-import { listHiddenDuplicates, hideDuplicates, restoreHidden } from './services/storage';
+import { getHiddenDuplicateAlbums, hideDuplicateAlbums, restoreHiddenDuplicates, unhideDuplicateIds } from './utils/duplicateBlocklist';
 import { SyncPhotosProvider }     from './contexts/SyncPhotosContext';
 import { getExportAlbums, getExistingAlbumIds, upsertAlbum, saveToStore } from './services/DatabaseService';
 import { exportRemoteBackup }   from './services/remote/libraryRemote';
@@ -47,6 +48,7 @@ import { useBackupSettings }    from './hooks/useBackupSettings';
 import { Preferences } from '@capacitor/preferences';
 import { usePlaylistDashboard } from './hooks/usePlaylistDashboard';
 import { usePlayerQueue }       from './hooks/usePlayerQueue';
+import { useLocalPlayback }     from './hooks/useLocalPlayback';
 // Local librespot playback has been replaced by the Web Playback SDK player.
 import { Artwork }              from './components/Artwork';
 import { addAlbumsToQueue, createPlaylistFromAlbums, addAlbumsToPlaylist, getUserPlaylists, createPlaylistWithUris, addTrackUrisToPlaylist } from './services/SpotifyPlaylistService';import { removeSavedAlbums, saveAlbums, getSavedAlbumArtistIds, areArtistsFollowed, followArtists } from './services/SpotifyApiService';
@@ -78,9 +80,7 @@ type ActiveTab   = 'library' | 'playlists' | 'tools' | 'settings' | 'player';
 export default function App() {
   const auth   = useSpotifyAuth();
   const [showCreds, setShowCreds] = useState(false);
-  // Bumped after saving Spotify credentials so the (already-false) showCreds
-  // state still triggers a re-render and the app can leave the creds screen.
-  const [, setCredsTick] = useState(0);
+  const [credsVersion, setCredsVersion] = useState(0);
 
   useEffect(() => { void loadSpotifyCredentials(); }, []);
 
@@ -106,10 +106,6 @@ export default function App() {
   const backup = useBackupSettings();
   const pld    = usePlaylistDashboard({ mode: ds.settings.mode, serverUrl: ds.settings.serverUrl, sessionActive });
   const isRemote = ds.settings.mode === 'remote';
-  const storageCtx = useMemo(
-    () => ({ remote: isRemote, serverUrl: ds.settings.serverUrl }),
-    [isRemote, ds.settings.serverUrl],
-  );
   const remoteOpt = isRemote ? { serverUrl: ds.settings.serverUrl } : null;
 
   const openPlaylistId = pld.selectedPlaylist?.id ?? null;
@@ -157,6 +153,7 @@ export default function App() {
     onMessage: showToast,
     onPlaylistsChanged: () => { void pld.loadPlaylists(); },
   });
+  const localPlayer = useLocalPlayback();
   // Account switch / logout drops all loaded state — cached playlist markers
 
   // and grids are per-user and would otherwise leak across accounts.
@@ -251,8 +248,8 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
       .catch(() => {});
   }, []);
   useEffect(() => {
-    listHiddenDuplicates(storageCtx).then((albums) => setHiddenDuplicateAlbums(albums)).catch(() => {});
-  }, [storageCtx]);
+    getHiddenDuplicateAlbums().then((albums) => setHiddenDuplicateAlbums(albums)).catch(() => {});
+  }, []);
 
   const handleToggleAutohide = useCallback((on: boolean) => {
     setAutohideNav(on);
@@ -270,11 +267,18 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
   }, []);
 
   const runDuplicateScan = useCallback(async () => {
+    if (ds.settings.mode === 'remote') {
+      setDupesOpen(true);
+      setDuplicateGroups([]);
+      setHiddenDuplicateAlbums([]);
+      showToast('Duplicate cleanup is available in local mode only.', false);
+      return;
+    }
     setDupesOpen(true);
     setDuplicatesLoading(true);
     setDuplicateGroups(null);
     try {
-      const hidden = await listHiddenDuplicates(storageCtx);
+      const hidden = await getHiddenDuplicateAlbums();
       setHiddenDuplicateAlbums(hidden);
       const hiddenIds = new Set(hidden.map((a) => a.id));
       const all = await lib.getAlbumsForDuplicateScan();
@@ -283,21 +287,19 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
       showToast(e?.message ?? 'Could not scan for duplicates.', false);
       setDuplicateGroups([]);
     } finally { setDuplicatesLoading(false); }
-  }, [lib, showToast, storageCtx]);
+  }, [ds.settings.mode, lib, showToast]);
 
   const handleDuplicateRemove = useCallback(async (ids: string[]) => {
     if (!ids.length) return;
     const selected = (duplicateGroups ?? []).flatMap((group) => group.albums).filter((album) => ids.includes(album.id));
-    await hideDuplicates(storageCtx, selected);
-    // Local: drop the hidden rows from SQLite (restorable). Remote: leave the
-    // server library untouched — hiding is enough and stays reversible.
+    await hideDuplicateAlbums(selected);
     await lib.deleteLocalAlbums(ids);
-    const hidden = await listHiddenDuplicates(storageCtx);
+    const hidden = await getHiddenDuplicateAlbums();
     setHiddenDuplicateAlbums(hidden);
     const hiddenIds = new Set(hidden.map((a) => a.id));
     const all = await lib.getAlbumsForDuplicateScan();
     setDuplicateGroups(findDuplicates(all.filter((album) => !hiddenIds.has(album.id))));
-  }, [duplicateGroups, lib, storageCtx]);
+  }, [duplicateGroups, lib]);
 
   const handleDuplicateRemovePermanent = useCallback(async (ids: string[]) => {
     if (!ids.length) return;
@@ -312,12 +314,12 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
       return;
     }
     try { await lib.deleteLocalAlbums(ids); } catch { /* best effort */ }
-    const hidden = await listHiddenDuplicates(storageCtx);
+    const hidden = await getHiddenDuplicateAlbums();
     const hiddenIds = new Set(hidden.map((a) => a.id));
     const all = await lib.getAlbumsForDuplicateScan();
     setDuplicateGroups(findDuplicates(all.filter((album) => !hiddenIds.has(album.id))));
     showToast(`Permanently removed ${ids.length} duplicate album(s) from Spotify.`, true);
-  }, [lib, storageCtx]);
+  }, [lib]);
 
   const handleRemoveSelectedFromLibrary = useCallback(async () => {
     const ids = [...sel.selected];
@@ -390,27 +392,23 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
 
   const handleDuplicateRestore = useCallback(async () => {
     try {
-      const restored = await restoreHidden(storageCtx);
-      // Local: put the hidden albums back into SQLite. Remote: the albums were
-      // never removed from the server library, so only the blocklist changes.
-      if (!isRemote) {
-        for (const album of restored) {
-          await upsertAlbum({
-            id: album.id,
-            title: album.title,
-            artist: album.artist,
-            year: album.year,
-            genre: album.genre ?? '',
-            image_url: album.image_url ?? '',
-            image_path: album.image_path ?? '',
-            added_at: album.added_at ?? '',
-            album_type: album.album_type ?? '',
-            popularity: album.popularity ?? null,
-            spotify_url: album.spotify_url ?? '',
-          });
-        }
-        await saveToStore();
+      const restored = await restoreHiddenDuplicates();
+      for (const album of restored) {
+        await upsertAlbum({
+          id: album.id,
+          title: album.title,
+          artist: album.artist,
+          year: album.year,
+          genre: album.genre ?? '',
+          image_url: album.image_url ?? '',
+          image_path: album.image_path ?? '',
+          added_at: album.added_at ?? '',
+          album_type: album.album_type ?? '',
+          popularity: album.popularity ?? null,
+          spotify_url: album.spotify_url ?? '',
+        });
       }
+      await saveToStore();
       await lib.refresh();
       setHiddenDuplicateAlbums([]);
       const all = await lib.getAlbumsForDuplicateScan();
@@ -419,7 +417,7 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
     } catch (e: any) {
       showToast(e?.message ?? 'Could not restore hidden albums.', false);
     }
-  }, [lib, showToast, storageCtx, isRemote]);
+  }, [lib, showToast]);
   /**
    * Shared shape for the "add the found albums to a playlist" flows. The AI
    * scan resolves albums as {spotify_id, artist_name}, the add-from-site
@@ -852,7 +850,7 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
   };
 
   if (auth.authState === 'loading') return <Splash />;
-  if (showCreds) return <SpotifyCredentialsScreen onBack={() => setShowCreds(false)} onUseServer={() => { setShowCreds(false); ds.setMode('remote'); }} />;
+  if (showCreds) return <SpotifyCredentialsScreen onBack={() => setShowCreds(false)} onSaved={() => { setShowCreds(false); setCredsVersion(v => v + 1); }} onUseServer={() => { setShowCreds(false); ds.setMode('remote'); }} />;
   if (srv.authState === 'loading' && ds.settings.mode === 'remote') return <Splash />;
   if (ds.settings.mode === 'remote') {
     if (srv.authState === 'unauthenticated') {
@@ -863,7 +861,7 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
     }
   } else if (auth.authState === 'unauthenticated') {
     if (!hasSpotifyCredentials()) {
-      return <SpotifyCredentialsScreen onSaved={() => { setShowCreds(false); setCredsTick((t) => t + 1); }} onUseServer={() => ds.setMode('remote')} />;
+      return <SpotifyCredentialsScreen onSaved={() => { setShowCreds(false); setCredsVersion(v => v + 1); }} onUseServer={() => ds.setMode('remote')} />;
     }
     return <LoginScreen onLogin={auth.login} error={auth.error} onConfigure={() => setShowCreds(true)} onUseServer={() => ds.setMode('remote')} />;
   }
@@ -1058,8 +1056,8 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
               <section className="settings-section" style={{ width: '100%' }}>
                 <h3 className="settings-heading">Library tools</h3>
                 <p className="settings-sub">
-                  Duplicate releases are detected from your library and hidden reversibly —
-                  nothing is removed from your Spotify account.
+                  Local-only tools: duplicate releases are detected on the device and are not
+                  removed from your Spotify account.
                 </p>
                 <button
                   type="button"
@@ -1072,8 +1070,8 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
                 <button
                   type="button"
                   className="sync-btn sync-btn--ghost full-width"
-                  disabled={duplicatesLoading}
-                  style={{ marginTop: '0.5rem' }}
+                  disabled={isRemote}
+                  style={{ marginTop: '0.5rem', ...(isRemote ? { opacity: 0.5 } : {}) }}
                   onClick={() => void runDuplicateScan()}
                 >
                   Scan duplicate albums
@@ -1170,6 +1168,17 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
                 onRestore={() => { void handleDuplicateRestore(); }}
               />
             )}
+            {aiOpen && (
+              <AIAssistantDialog
+                open={aiOpen}
+                onClose={() => setAiOpen(false)}
+                serverUrl={ds.settings.serverUrl}
+                isRemote={isRemote}
+                stats={lib.stats}
+                albums={lib.albums}
+                selectedAlbums={sel.selectedAlbums}
+              />
+            )}
             {addFromSiteOpen && (
               <AddFromSiteDialog
                 open={addFromSiteOpen}
@@ -1224,7 +1233,6 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
                 open={concertsScanOpen}
                 onClose={() => setConcertsScanOpen(false)}
                 serverUrl={ds.settings.serverUrl}
-                isRemote={isRemote}
                 onSaved={(count) => {
                   setConcertsScanOpen(false);
                   showToast(`Saved ${count} concert(s).`, true);
@@ -1236,8 +1244,6 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
             <ConcertsListDialog
               open={concertsListOpen}
               onClose={() => setConcertsListOpen(false)}
-              serverUrl={ds.settings.serverUrl}
-              isRemote={isRemote}
             />
             {discographyOpen && (
               <ArtistDiscographyDialog
@@ -1250,17 +1256,6 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
                 getLibraryAlbumIds={handleGetLibraryAlbumIds}
                 importAlbumsToLibrary={lib.importAlbums}
                 onPlaylistsChanged={() => { void pld.loadPlaylists(); }}
-              />
-            )}
-            {aiOpen && (
-              <AIAssistantDialog
-                open={aiOpen}
-                onClose={() => setAiOpen(false)}
-                serverUrl={ds.settings.serverUrl}
-                isRemote={isRemote}
-                stats={lib.stats}
-                albums={lib.albums}
-                selectedAlbums={sel.selectedAlbums}
               />
             )}
           </>
@@ -1291,6 +1286,7 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
         {activeTab === 'player' && (
           <PlayerView
             player={player}
+            localPlayer={localPlayer}
             authState={auth.authState}
             onRequestLocalCreate={() => requestLocalCreate([])}
             onRequestLocalReset={requestLocalReset}
@@ -1319,8 +1315,8 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
           isRemote={isRemote}
           serverUrl={ds.settings.serverUrl}
           playlistId={trackAlbumPlaylistId ?? undefined}
-          localPlaybackAvailable={false}
-          localPlaybackEnabled={false}
+          localPlaybackAvailable={localPlayer.available}
+          localPlaybackEnabled={!!localPlayer.state?.enabled}
           hasLocalQueue={!!player.localQueue}
           localQueueBusy={player.localBusy}
           activeQueueBusy={player.mergeBusy}
@@ -1330,6 +1326,9 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
           onLocalQueueNext={() => void player.addToLocalQueue([trackAlbum.id], true)}
           onLocalQueueReset={requestLocalReset}
           onLocalQueueTrack={(uri, insertNext) => void player.addTrackUrisToLocalQueue([uri], insertNext)}
+          onPlayLocally={(tracks, startIndex) => void localPlayer.playAlbum(tracks, startIndex)}
+          onQueueNextLocally={(track) => void localPlayer.enqueueTrack(track, true)}
+          onQueueEndLocally={(track) => void localPlayer.enqueueTrack(track, false)}
           onClose={() => { setTrackAlbum(null); setTrackAlbumPlaylistId(null); }}
         />
       )}

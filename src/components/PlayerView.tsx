@@ -1,8 +1,10 @@
-import { Artwork } from './Artwork';
+﻿import { Artwork } from './Artwork';
+import { LocalPlaybackCard } from './LocalPlaybackCard';
 import { WebPlaybackSdkPlayer } from './WebPlaybackSdkPlayer';
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatMs, queueTrackToSpotifyActive, playTracks } from '../services/SpotifyPlaybackService';
 import type { PlayerQueueController } from '../hooks/usePlayerQueue';
+import type { LocalPlayerController } from '../hooks/useLocalPlayback';
 
 // ---------------------------------------------------------------------------
 // Player tab — now playing + the two queue-playlist models
@@ -12,6 +14,7 @@ type AuthState = 'loading' | 'unauthenticated' | 'authenticated';
 
 interface Props {
   player:              PlayerQueueController;
+  localPlayer?:        LocalPlayerController | null;
   authState?:          AuthState;
   isRemote?:           boolean;
   selectedCount?:      number;
@@ -32,11 +35,12 @@ function snapshotName(): string {
     hour:   '2-digit',
     minute: '2-digit',
   }).format(new Date());
-  return `Queue snapshot ┬╖ ${stamp}`;
+  return `Queue snapshot · ${stamp}`;
 }
 
 export const PlayerView: React.FC<Props> = ({
   player,
+  localPlayer,
   authState,
   isRemote,
   selectedCount,
@@ -128,14 +132,16 @@ export const PlayerView: React.FC<Props> = ({
         </button>
       </div>
 
+            {localPlayer?.available && <LocalPlaybackCard local={localPlayer} />}
+
             <WebPlaybackSdkPlayer />
 
 {authState !== 'authenticated' && (
         <div className="player-notice" role="status">
           <strong>Spotify login needed on this device.</strong>
           <p>
-            Playback and queue playlists use Spotify’s Web API directly. The media server keeps
-            the library, but it cannot control this device’s playback.
+            Playback and queue playlists use Spotify's Web API directly. The media server keeps
+            the library, but it cannot control this device's playback.
           </p>
           <button className="queue-btn queue-btn--primary" onClick={onConnectSpotify}>
             Connect Spotify on this device
@@ -155,7 +161,7 @@ export const PlayerView: React.FC<Props> = ({
           ) : !track ? (
             <div className="player-empty">
               <p>No active Spotify playback.</p>
-              <p className="player-hint">Open Spotify on a device, or switch to “On this device” in Settings.</p>
+              <p className="player-hint">Open Spotify on a device, or switch to "On this device" in Settings.</p>
             </div>
           ) : (
             <div className="player-now">
@@ -210,8 +216,8 @@ export const PlayerView: React.FC<Props> = ({
                 <p className="queue-status">{localStatus}</p>
                 <p className="queue-ref">
                   {localQueue
-                    ? `“${localQueue.name}” ┬╖ ${localQueue.uris.length} tracks`
-                    : 'The playlist itself is the queue. Spotify’s manual queue is ignored.'}
+                    ? `"${localQueue.name}" · ${localQueue.uris.length} tracks`
+                    : "The playlist itself is the queue. Spotify's manual queue is ignored."}
                 </p>
                 <button
                   className="queue-btn queue-btn--primary queue-btn--full"
@@ -231,7 +237,7 @@ export const PlayerView: React.FC<Props> = ({
                 </div>
                 <p className="queue-help">
                   Add selected to end and Queue next are on the album pages. The playlist ID is the
-                  queue, and Spotify’s manual queue is ignored. Clear starts an empty queue and keeps
+                  queue, and Spotify's manual queue is ignored. Clear starts an empty queue and keeps
                   the old playlist on Spotify.
                 </p>
               </>
@@ -240,7 +246,7 @@ export const PlayerView: React.FC<Props> = ({
                 <p className="queue-status">{mergeStatus}</p>
                 {mergeQueue ? (
                   <>
-                    <p className="queue-ref">“{mergeQueue.name}” ┬╖ {mergeQueue.uris.length} tracks</p>
+                    <p className="queue-ref">"{mergeQueue.name}" · {mergeQueue.uris.length} tracks</p>
                     <button className="queue-btn queue-btn--primary queue-btn--full"
                             onClick={onRequestMergeNew} disabled={busy}>
                       New queue playlist
@@ -281,7 +287,7 @@ export const PlayerView: React.FC<Props> = ({
           {playback?.contextType === 'playlist' && (
             <p className="player-context">
               {playback.contextName ? `Playing from ${playback.contextName}` : 'Playing from a playlist'}
-              {!playback.contextEditable && ' ┬╖ append is disabled for this playlist'}
+              {!playback.contextEditable && ' · append is disabled for this playlist'}
             </p>
           )}
           {playback?.contextType !== 'playlist' && track && (
@@ -319,7 +325,7 @@ export const PlayerView: React.FC<Props> = ({
             Queue snapshot copies the current track + up-next once. Append only works on playlists
             you own or collaborate on. Play as queue playlist hands the queue over to a new playlist.
             Spotify Premium and an active device are required.
-            {isRemote && ' Queue playlists use this device’s Spotify login; the media server keeps the library.'}
+            {isRemote && " Queue playlists use this device's Spotify login; the media server keeps the library."}
           </p>
         </>
       )}

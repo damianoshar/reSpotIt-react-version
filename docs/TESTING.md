@@ -1,4 +1,4 @@
-# Tests & CI — React client
+# Tests & CI — React librespot client
 
 ```bash
 npm test          # vitest run
