@@ -90,4 +90,12 @@ describe('loadPlaylistAlbums', () => {
     await loadPlaylistAlbums('p1', '', '', 'album_id; DROP TABLE playlist_albums', 'asc');
     expect(captured[0]).toContain('ORDER BY LOWER(artist) ASC');
   });
+
+  it('OR-matches selected artist credits, including collaborators', async () => {
+    await loadPlaylistAlbums(
+      'p1', '', '', 'artist', 'asc', '', '', ['Mark Lanegan', 'Isobel Campbell'],
+    );
+    expect(captured[0]).toContain(' OR ');
+    expect(captured[0]).toContain("replace(lower(artist), ', ', ',')");
+  });
 });

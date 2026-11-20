@@ -26,7 +26,7 @@ import { describeRemoteError } from '../services/errorCodes';
 // ---------------------------------------------------------------------------
 
 const DEFAULT_FILTER: FilterState = {
-  search: '', genre: '', artist: '', yearFrom: '', yearTo: '',
+  search: '', genre: '', artists: [], yearFrom: '', yearTo: '',
   sortField: 'added_at', sortOrder: 'desc',
   albumType: '', minPop: 0, maxPop: 100,
 };
@@ -108,11 +108,11 @@ export function useLibrary(ds: { mode: DataSourceMode; serverUrl: string; sessio
         const [first, cnt, g, ar, y, s] = await Promise.all([
           getAllAlbums(
             f.search, f.genre, f.sortField, f.sortOrder,
-            yearStr(f.yearFrom), yearStr(f.yearTo), f.artist,
+            yearStr(f.yearFrom), yearStr(f.yearTo), f.artists,
             limit, 0,
             f.albumType, f.minPop, f.maxPop
           ),
-          countAlbums(f.search, f.genre, yearStr(f.yearFrom), yearStr(f.yearTo), f.artist,
+          countAlbums(f.search, f.genre, yearStr(f.yearFrom), yearStr(f.yearTo), f.artists,
                       f.albumType, f.minPop, f.maxPop),
           getDistinctGenres(),
           getDistinctArtists(),
@@ -160,7 +160,7 @@ export function useLibrary(ds: { mode: DataSourceMode; serverUrl: string; sessio
         ? (await queryRemoteAlbums(serverUrl, f, PAGE_SIZE, offsetRef.current)).albums
         : await getAllAlbums(
             f.search, f.genre, f.sortField, f.sortOrder,
-            yearStr(f.yearFrom), yearStr(f.yearTo), f.artist,
+            yearStr(f.yearFrom), yearStr(f.yearTo), f.artists,
             PAGE_SIZE, offsetRef.current,
             f.albumType, f.minPop, f.maxPop
           );

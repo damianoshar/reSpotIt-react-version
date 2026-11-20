@@ -103,12 +103,16 @@ function buildQuery(f: FilterState, limit: number, offset: number): string {
   const q = new URLSearchParams({
     search:    f.search,
     genre:     f.genre,
-    artist:    f.artist,
     sort:      f.sortField,
     order:     f.sortOrder,
     page:      String(page),
     limit:     String(limit),
   });
+  // One repeated `artist` param per selected name: the server ORs them, which
+  // is what lets a collaborator's albums come from several credits at once.
+  for (const name of f.artists) {
+    if (name.trim()) q.append('artist', name);
+  }
   // Rich-extras filters — only sent when set, so backends that don't
   // implement them still see the canonical query.
   if (f.albumType) q.set('album_type', f.albumType);
