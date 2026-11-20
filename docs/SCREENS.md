@@ -36,9 +36,11 @@ The default tab: your saved albums as a grid, with the server counters on top.
 
 ![Filters](screenshots/02-library-filters.png)
 
-The filter panel: **artist**, **genre**, **release year** (from/to plus decade
-shortcuts), **album type** and **popularity** (min/max). Results update
-immediately.
+The filter panel: **artists** (search and select multiple names), **genre**,
+**release year** (from/to plus decade shortcuts), **album type** and
+**popularity** (min/max). Selected artists are combined with OR semantics, so
+albums credited to any selected artist—including collaborator credits—are
+included. Results update immediately.
 
 ## 3. Album track sheet
 
@@ -62,6 +64,8 @@ Sheet for one album with **Play album on Spotify**, **Add to playlist** and
     from playlist).
 * The redundant per-track local **Play** button is removed in the album context
   (the playlist **Pos** button covers that intent for on-device playback).
+* Playing a single track sends its URI using Spotify's `uris` request field;
+  album and playlist playback continue to use `context_uri`.
 * Above the track list a two-card legend explains both columns.
 
 ## 4. Playlists

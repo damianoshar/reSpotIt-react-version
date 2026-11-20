@@ -869,7 +869,7 @@ const [aiTrackScanOpen, setAiTrackScanOpen] = useState(false);
   }
 
   const isBusy          = lib.syncing || lib.spotifySync.active || queueBusy;
-  const hasActiveFilter = !!(lib.filters.search || lib.filters.genre || lib.filters.artist ||
+  const hasActiveFilter = !!(lib.filters.search || lib.filters.genre || lib.filters.artists.length ||
                               lib.filters.yearFrom !== '' || lib.filters.yearTo !== '' ||
                               lib.filters.albumType !== '' || lib.filters.minPop > 0 || lib.filters.maxPop < 100);
   const showLibFilters  = lib.dbReady && (lib.albums.length > 0 || hasActiveFilter || lib.genres.length > 0);

@@ -63,7 +63,12 @@ export type ViewMode  = 'grid' | 'list' | 'compact';
 export interface FilterState {
   search:    string;
   genre:     string;
-  artist:    string;
+  /**
+   * Artist names to include (OR). An album matches when its artist is any of
+   * them, so a collaborator's records can be pulled in from several credits at
+   * once instead of one exact name at a time.
+   */
+  artists:   string[];
   yearFrom:  number | '';
   yearTo:    number | '';
   sortField: SortField;

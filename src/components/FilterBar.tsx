@@ -39,7 +39,7 @@ export const FilterBar: React.FC<Props> = ({
   const activeCount = [
     filters.search   !== '',
     filters.genre    !== '',
-    filters.artist   !== '',
+    filters.artists.length > 0,
     filters.yearFrom !== '',
     filters.yearTo   !== '',
     filters.albumType !== '',
@@ -62,10 +62,19 @@ export const FilterBar: React.FC<Props> = ({
 
   const filteredArtists = useMemo(() =>
     artistSearch.trim()
-      ? artists.filter((a) => a.toLowerCase().includes(artistSearch.toLowerCase()))
+      ? artists.filter((a) => a.toLowerCase().includes(artistSearch.trim().toLowerCase()))
       : artists,
     [artists, artistSearch]
   );
+
+  const toggleArtist = useCallback((artist: string) => {
+    const next = filters.artists.includes(artist)
+      ? filters.artists.filter((name) => name !== artist)
+      : [...filters.artists, artist];
+    onFilterChange('artists', next);
+  }, [filters.artists, onFilterChange]);
+
+  const visibleArtists = filteredArtists.slice(0, 50);
 
   return (
     <div className="filter-bar">
@@ -181,9 +190,10 @@ export const FilterBar: React.FC<Props> = ({
 
           {/* Artist filter */}
           <div className="filter-group">
-            <label className="filter-label">Artist</label>
+            <label className="filter-label" htmlFor="artist-filter-search">Artist</label>
             <div className="artist-search-wrap">
               <input
+                id="artist-filter-search"
                 className="search-input artist-filter-search"
                 type="search"
                 placeholder={'Search ' + artists.length + ' artists…'}
@@ -192,22 +202,56 @@ export const FilterBar: React.FC<Props> = ({
                 aria-label="Search artists"
               />
             </div>
-            <select
-              className="filter-select"
-              value={filters.artist}
-              onChange={(e) => { onFilterChange('artist', e.target.value); setArtistSearch(''); }}
-              aria-label="Filter by artist"
-              size={filteredArtists.length > 0 && artistSearch ? Math.min(filteredArtists.length + 1, 6) : 1}
+            <button
+              type="button"
+              className={'artist-all-btn' + (filters.artists.length === 0 ? ' active' : '')}
+              onClick={() => { onFilterChange('artists', []); setArtistSearch(''); }}
+              aria-pressed={filters.artists.length === 0}
             >
-              <option value="">All Artists</option>
-              {filteredArtists.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-            {filters.artist && (
+              All Artists
+            </button>
+            {filters.artists.length > 0 && (
+              <div className="artist-selected-list" aria-label="Selected artists">
+                {filters.artists.map((artist) => (
+                  <button
+                    key={artist}
+                    type="button"
+                    className="filter-clear-chip"
+                    onClick={() => toggleArtist(artist)}
+                    aria-label={'Remove artist ' + artist}
+                    title={'Remove ' + artist}
+                  >
+                    ✕ {artist}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="artist-options" role="group" aria-label="Filter by artist">
+              {visibleArtists.map((artist) => (
+                <label className="artist-option" key={artist}>
+                  <input
+                    type="checkbox"
+                    checked={filters.artists.includes(artist)}
+                    onChange={() => toggleArtist(artist)}
+                  />
+                  <span>{artist}</span>
+                </label>
+              ))}
+              {filteredArtists.length === 0 && (
+                <span className="artist-options-empty">No artists match that search.</span>
+              )}
+              {filteredArtists.length > visibleArtists.length && (
+                <span className="artist-options-hint">
+                  Showing first {visibleArtists.length} of {filteredArtists.length} matches. Refine your search to see more.
+                </span>
+              )}
+            </div>
+            {filters.artists.length > 0 && (
               <button
                 className="filter-clear-chip"
-                onClick={() => { onFilterChange('artist', ''); setArtistSearch(''); }}
+                onClick={() => onFilterChange('artists', [])}
               >
-                ✕ {filters.artist}
+                Clear selected artists
               </button>
             )}
           </div>

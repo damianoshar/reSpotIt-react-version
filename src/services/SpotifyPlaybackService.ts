@@ -235,6 +235,11 @@ export async function playOnActiveDevice(
   offset?: { position: number },
 ): Promise<void> {
   if (!contextUri) throw new Error('Nothing to play.');
+  // Spotify only accepts an album, artist or playlist as `context_uri`. A
+  // single track has to go in `uris`; sending `spotify:track:...` as a context
+  // is a 400, which is why playing one track from a playlist/album sheet
+  // appeared to do nothing at all.
+  const isTrack = contextUri.startsWith('spotify:track:');
   let deviceId: string | null = null;
   try {
     deviceId = pickPlaybackDevice(await getDevices())?.id ?? null;
@@ -242,13 +247,13 @@ export async function playOnActiveDevice(
     deviceId = null; // no device list — let Spotify choose the active one
   }
   const query = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
+  const playBody = isTrack
+    ? { uris: [contextUri] }
+    : { context_uri: contextUri, ...(offset ? { offset } : {}) };
   try {
     await spotifyRequest<unknown>(`/me/player/play${query}`, {
       method: 'PUT',
-      body: JSON.stringify({
-        context_uri: contextUri,
-        ...(offset ? { offset } : {}),
-      }),
+      body: JSON.stringify(playBody),
     });
   } catch (error) {
     if (error instanceof SpotifyPlaybackError) {

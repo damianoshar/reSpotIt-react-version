@@ -291,8 +291,12 @@ export async function playContextWithWebPlaybackSdk(
 
   const id = await initWebPlaybackSdk(getToken ?? tokenGetter ?? undefined);
   const url = `https://api.spotify.com/v1/me/player/play?device_id=${encodeURIComponent(id)}`;
-  const body: Record<string, unknown> = { context_uri: contextUri };
-  if (offset > 0) body.offset = { position: offset };
+  // A track cannot be a `context_uri`; Spotify rejects it with a 400.
+  const isTrack = contextUri.startsWith('spotify:track:');
+  const body: Record<string, unknown> = isTrack
+    ? { uris: [contextUri] }
+    : { context_uri: contextUri };
+  if (!isTrack && offset > 0) body.offset = { position: offset };
   const response = await fetch(url, {
     method: 'PUT',
     headers: {

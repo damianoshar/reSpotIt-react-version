@@ -168,7 +168,8 @@ export async function upsertAlbums(albums: Album[]): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function buildWhere(
-  search: string, genre: string, yearFrom: string, yearTo: string, artist: string,
+  search: string, genre: string, yearFrom: string, yearTo: string,
+  artists: string[],
   albumType = '', minPop = 0, maxPop = 100,
 ): { where: string; params: unknown[] } {
   const conditions: string[] = [];
@@ -180,7 +181,18 @@ function buildWhere(
     params.push(q, q);
   }
   if (genre)     { conditions.push('LOWER(genre)  = LOWER(?)'); params.push(genre);  }
-  if (artist)    { conditions.push('LOWER(artist) = LOWER(?)'); params.push(artist); }
+  // Several artists select the union of their albums, so a collaborator's
+  // records can come from more than one credit at once.
+  const wantedArtists = artists.filter((name) => !!name.trim());
+  if (wantedArtists.length) {
+    // One predicate per selected name, ORed together. The index-match checks
+    // complete comma-separated artist credits, not partial name fragments.
+    const artistConditions = wantedArtists.map(() =>
+      "instr(',' || replace(lower(artist), ', ', ',') || ',', ',' || lower(?) || ',') > 0"
+    );
+    conditions.push('(' + artistConditions.join(' OR ') + ')');
+    params.push(...wantedArtists);
+  }
   if (yearFrom)  { conditions.push('year >= ?'); params.push(parseInt(yearFrom, 10)); }
   if (yearTo)    { conditions.push('year <= ?'); params.push(parseInt(yearTo,   10)); }
   // Rich-extras filters (V6) — same semantics as the server: rows without a
@@ -208,14 +220,14 @@ export async function getAllAlbums(
   sortOrder  = 'desc',
   yearFrom   = '',
   yearTo     = '',
-  artist     = '',
+  artists: string[] = [],
   limit      = PAGE_SIZE,
   offset     = 0,
   albumType  = '',
   minPop     = 0,
   maxPop     = 100,
 ): Promise<Album[]> {
-  const { where, params } = buildWhere(search, genre, yearFrom, yearTo, artist, albumType, minPop, maxPop);
+  const { where, params } = buildWhere(search, genre, yearFrom, yearTo, artists, albumType, minPop, maxPop);
   const allowed = new Set(['title', 'artist', 'year', 'genre', 'added_at', 'popularity']);
   const col     = allowed.has(sortField) ? sortField : 'artist';
   const dir     = sortOrder === 'desc' ? 'DESC' : 'ASC';
@@ -244,12 +256,12 @@ export async function countAlbums(
   genre     = '',
   yearFrom  = '',
   yearTo    = '',
-  artist    = '',
+  artists: string[] = [],
   albumType = '',
   minPop    = 0,
   maxPop    = 100,
 ): Promise<number> {
-  const { where, params } = buildWhere(search, genre, yearFrom, yearTo, artist, albumType, minPop, maxPop);
+  const { where, params } = buildWhere(search, genre, yearFrom, yearTo, artists, albumType, minPop, maxPop);
   const result = await db.query(
     `SELECT COUNT(*) AS n FROM albums ${where}`, params
   );
@@ -271,7 +283,10 @@ export async function getDistinctArtists(): Promise<string[]> {
   const result = await db.query(
     "SELECT DISTINCT artist FROM albums WHERE artist != '' ORDER BY LOWER(artist)"
   );
-  return ((result.values ?? []) as { artist: string }[]).map((r) => r.artist);
+  return [...new Set(((result.values ?? []) as { artist: string }[])
+    .flatMap((row) => row.artist.split(',').map((name) => name.trim()))
+    .filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
 
 export async function getDistinctYears(): Promise<number[]> {

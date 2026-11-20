@@ -6,13 +6,17 @@ vi.mock('./apiClient', () => ({
 }));
 
 import { apiFetch } from './apiClient';
-import { listRemotePlaylists, queryRemotePlaylistAlbums } from './playlistRemote';
+import {
+  deleteRemotePlaylist,
+  listRemotePlaylists,
+  queryRemotePlaylistAlbums,
+} from './playlistRemote';
 import type { FilterState } from '../../types';
 
 const mockedFetch = vi.mocked(apiFetch);
 
 const filters = (over: Partial<FilterState> = {}): FilterState => ({
-  search: '', genre: '', artist: '',
+  search: '', genre: '', artists: [],
   yearFrom: '', yearTo: '',
   sortField: 'artist', sortOrder: 'asc',
   albumType: '', minPop: 0, maxPop: 100,
@@ -112,6 +116,20 @@ describe('queryRemotePlaylistAlbums', () => {
     expect(url).toContain('year_to=1999');
   });
 
+  it('sends each selected artist as a repeated query parameter', async () => {
+    mockedFetch.mockResolvedValueOnce({ items: [], total: 0 } as never);
+
+    await queryRemotePlaylistAlbums(
+      'http://media.local:8000', 'p1',
+      filters({ artists: ['Mark Lanegan', 'Isobel Campbell'] }), 48, 0,
+    );
+
+    const url = mockedFetch.mock.calls[0][1] as string;
+    expect(url.match(/(?:\?|&)artist=/g)).toHaveLength(2);
+    expect(url).toContain('artist=Mark+Lanegan');
+    expect(url).toContain('artist=Isobel+Campbell');
+  });
+
   it('asks the server for the "Date Added" order', async () => {
     mockedFetch.mockResolvedValueOnce({ items: [], total: 0 } as never);
 
@@ -122,5 +140,21 @@ describe('queryRemotePlaylistAlbums', () => {
     const url = mockedFetch.mock.calls[0][1] as string;
     expect(url).toContain('sort=added_at');
     expect(url).toContain('order=desc');
+  });
+});
+
+describe('deleteRemotePlaylist', () => {
+  beforeEach(() => {
+    mockedFetch.mockReset();
+  });
+
+  it('sends a DELETE to the playlist route', async () => {
+    mockedFetch.mockResolvedValueOnce({ playlist_id: 'p1', deleted: true } as never);
+
+    await deleteRemotePlaylist('http://media.local:8000', 'p1');
+
+    expect(mockedFetch).toHaveBeenCalledWith(
+      'http://media.local:8000', '/api/v1/playlists/p1', { method: 'DELETE' },
+    );
   });
 });

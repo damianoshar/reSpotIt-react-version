@@ -15,7 +15,7 @@ import { DataSourceMode } from '../config/server';
 import {
   listRemotePlaylists, queryRemotePlaylistAlbums, fetchRemotePlaylistMeta,
   startRemotePlaylistSync, pollRemotePlaylistSync,
-  exportRemotePlaylist,
+  exportRemotePlaylist, deleteRemotePlaylist,
 } from '../services/remote/playlistRemote';
 import { cancelRemoteJob } from '../services/remote/libraryRemote';
 
@@ -24,7 +24,7 @@ import { cancelRemoteJob } from '../services/remote/libraryRemote';
 // ---------------------------------------------------------------------------
 
 const DEFAULT_FILTER: FilterState = {
-  search: '', genre: '', artist: '', yearFrom: '', yearTo: '',
+  search: '', genre: '', artists: [], yearFrom: '', yearTo: '',
   sortField: 'added_at', sortOrder: 'desc',
   albumType: '', minPop: 0, maxPop: 100,
 };
@@ -150,11 +150,11 @@ export function usePlaylistDashboard(ds: { mode: DataSourceMode; serverUrl: stri
         const [first, cnt, opts, meta] = await Promise.all([
           loadPlaylistAlbums(
             playlistId, f.search, f.genre, f.sortField, f.sortOrder,
-            yearStr(f.yearFrom), yearStr(f.yearTo), f.artist, PAGE_SIZE, 0,
+            yearStr(f.yearFrom), yearStr(f.yearTo), f.artists, PAGE_SIZE, 0,
           ),
           countPlaylistAlbums(
             playlistId, f.search, f.genre,
-            yearStr(f.yearFrom), yearStr(f.yearTo), f.artist,
+            yearStr(f.yearFrom), yearStr(f.yearTo), f.artists,
           ),
           getPlaylistFilterOptions(playlistId),
           getPlaylistMeta(playlistId),
@@ -189,7 +189,7 @@ export function usePlaylistDashboard(ds: { mode: DataSourceMode; serverUrl: stri
             serverUrl, selectedIdRef.current, f, PAGE_SIZE, offsetRef.current)).albums
         : await loadPlaylistAlbums(
             selectedIdRef.current, f.search, f.genre, f.sortField, f.sortOrder,
-            yearStr(f.yearFrom), yearStr(f.yearTo), f.artist, PAGE_SIZE, offsetRef.current,
+            yearStr(f.yearFrom), yearStr(f.yearTo), f.artists, PAGE_SIZE, offsetRef.current,
           );
       if (!more.length) { setHasMore(false); return; }
       offsetRef.current += more.length;
@@ -326,17 +326,19 @@ export function usePlaylistDashboard(ds: { mode: DataSourceMode; serverUrl: stri
 
   const deleteSelectedPlaylists = useCallback(async (ids: string[]) => {
     if (!ids.length) return;
-    if (remote) {
-      setPlaylistsError('Playlist deletion is currently local-only.');
-      return;
-    }
     setPlaylistDeleteBusy(true);
     setPlaylistsError('');
     try {
       for (const id of ids) {
-        await unfollowPlaylist(id);
-        await clearLocalRetention(id);
-        await deletePlaylistCache(id);
+        if (remote) {
+          // The server unfollows on Spotify and drops its cached albums, so
+          // there is no per-device cache or retention row to clean up here.
+          await deleteRemotePlaylist(serverUrl, id);
+        } else {
+          await unfollowPlaylist(id);
+          await clearLocalRetention(id);
+          await deletePlaylistCache(id);
+        }
       }
       setPlaylists((prev) => prev.filter((p) => !ids.includes(p.id)));
       setSelectedPlaylistIds(new Set());
@@ -346,7 +348,7 @@ export function usePlaylistDashboard(ds: { mode: DataSourceMode; serverUrl: stri
     } finally {
       setPlaylistDeleteBusy(false);
     }
-  }, [loadPlaylists]);
+  }, [loadPlaylists, remote, serverUrl]);
 
   // Switching data source drops the selection (backends differ) — user re-picks.
   const modeKeyRef = useRef<string | null>(null);

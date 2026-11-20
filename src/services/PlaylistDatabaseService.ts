@@ -23,7 +23,7 @@ export interface StoredPlaylistMeta {
 
 function buildWhere(
   playlistId: string,
-  search: string, genre: string, yearFrom: string, yearTo: string, artist: string
+  search: string, genre: string, yearFrom: string, yearTo: string, artists: string[]
 ): { where: string; params: unknown[] } {
   const conditions = ['playlist_id = ?'];
   const params: unknown[] = [playlistId];
@@ -34,7 +34,14 @@ function buildWhere(
     params.push(q, q);
   }
   if (genre)    { conditions.push('LOWER(genre)  = LOWER(?)'); params.push(genre);  }
-  if (artist)   { conditions.push('LOWER(artist) = LOWER(?)'); params.push(artist); }
+  // Any of the chosen artists; see FilterState.artists.
+  const wantedArtists = artists.filter((name) => !!name.trim());
+  if (wantedArtists.length) {
+    conditions.push('(' + wantedArtists.map(() =>
+      "instr(',' || replace(lower(artist), ', ', ',') || ',', ',' || lower(?) || ',') > 0"
+    ).join(' OR ') + ')');
+    params.push(...wantedArtists);
+  }
   if (yearFrom) { conditions.push('year >= ?'); params.push(parseInt(yearFrom, 10)); }
   if (yearTo)   { conditions.push('year <= ?'); params.push(parseInt(yearTo,   10)); }
 
@@ -119,12 +126,12 @@ export async function loadPlaylistAlbums(
   sortOrder = 'asc',
   yearFrom  = '',
   yearTo    = '',
-  artist    = '',
+  artists: string[] = [],
   limit     = PAGE_SIZE,
   offset    = 0,
 ): Promise<PlaylistAlbum[]> {
   const db = await ensureDb();
-  const { where, params } = buildWhere(playlistId, search, genre, yearFrom, yearTo, artist);
+  const { where, params } = buildWhere(playlistId, search, genre, yearFrom, yearTo, artists);
   const dir     = sortOrder === 'desc' ? 'DESC' : 'ASC';
   const orderBy = resolvePlaylistOrderBy(sortField);
 
@@ -149,10 +156,10 @@ export async function loadPlaylistAlbums(
 
 export async function countPlaylistAlbums(
   playlistId: string,
-  search = '', genre = '', yearFrom = '', yearTo = '', artist = '',
+  search = '', genre = '', yearFrom = '', yearTo = '', artists: string[] = [],
 ): Promise<number> {
   const db = await ensureDb();
-  const { where, params } = buildWhere(playlistId, search, genre, yearFrom, yearTo, artist);
+  const { where, params } = buildWhere(playlistId, search, genre, yearFrom, yearTo, artists);
   const result = await db.query(
     `SELECT COUNT(*) AS n FROM playlist_albums ${where}`, params
   );
@@ -193,7 +200,10 @@ export async function getPlaylistFilterOptions(playlistId: string) {
 
   return {
     genres:  ((gRes.values ?? []) as { genre:  string }[]).map((r) => r.genre),
-    artists: ((aRes.values ?? []) as { artist: string }[]).map((r) => r.artist),
+    artists: [...new Set(((aRes.values ?? []) as { artist: string }[])
+      .flatMap((row) => row.artist.split(',').map((name) => name.trim()))
+      .filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
     years:   ((yRes.values ?? []) as { year:   number }[]).map((r) => r.year),
   };
 }
@@ -226,7 +236,7 @@ export async function exportPlaylistCSV(
   playlistName: string,
 ): Promise<PlaylistExportResult | null> {
   // Load ALL albums for this playlist (no filter, no limit)
-  const all = await loadPlaylistAlbums(playlistId, '', '', 'artist', 'asc', '', '', '', 9999, 0);
+  const all = await loadPlaylistAlbums(playlistId, '', '', 'artist', 'asc', '', '', [], 9999, 0);
   if (!all.length) return null;
 
   const csv      = playlistAlbumsToCSV(all);

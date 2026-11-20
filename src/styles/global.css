@@ -744,12 +744,26 @@ input, select { font: inherit; color: inherit; }
                               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .filter-clear-chip:hover   { background: color-mix(in oklch, var(--accent) 20%, transparent); }
 
-/* Show the select as a mini-listbox when typing (size > 1) */
-.filter-select[size]:not([size="1"]) {
-  height: auto;
-  border-radius: var(--radius-md);
-  padding: 0.25rem 0;
-}
+.artist-all-btn          { width: 100%; padding: 0.4rem 0.6rem; text-align: left;
+                           border: 1px solid var(--border); border-radius: var(--radius-md);
+                           color: var(--text-muted); font-size: var(--text-xs); }
+.artist-all-btn:hover,
+.artist-all-btn.active   { background: color-mix(in oklch, var(--accent) 12%, transparent);
+                           border-color: color-mix(in oklch, var(--accent) 40%, var(--border));
+                           color: var(--accent); }
+.artist-selected-list    { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.45rem; }
+.artist-options          { max-height: 15rem; overflow-y: auto; margin-top: 0.4rem;
+                           border: 1px solid var(--border); border-radius: var(--radius-md);
+                           background: var(--surface-2); }
+.artist-option           { display: flex; align-items: center; gap: 0.55rem; min-height: 2rem;
+                           padding: 0.25rem 0.55rem; cursor: pointer; font-size: var(--text-xs); }
+.artist-option:hover     { background: var(--surface-3); }
+.artist-option input     { width: 1rem; height: 1rem; flex: 0 0 auto; accent-color: var(--accent); }
+.artist-option span      { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artist-options-empty,
+.artist-options-hint      { display: block; padding: 0.5rem 0.6rem; color: var(--text-muted);
+                            font-size: var(--text-xs); }
+.artist-options-hint      { border-top: 1px solid var(--border); }
 
 /* ══════════════════════════════════════════════════════════════
    Playlist Picker

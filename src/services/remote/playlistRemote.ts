@@ -108,12 +108,15 @@ export async function queryRemotePlaylistAlbums(
   const q = new URLSearchParams({
     search:    f.search,
     genre:     f.genre,
-    artist:    f.artist,
     sort:      sortParam(f.sortField),
     order:     f.sortOrder,
     page:      String(page),
     limit:     String(limit),
   });
+  // Repeated `artist` params; the server ORs them (see FilterState.artists).
+  for (const name of f.artists) {
+    if (name.trim()) q.append('artist', name);
+  }
   // Only send the year filters the user actually set. An empty filter used to
   // go out as "year_from=" and the server rejected the whole request.
   const yf = yearParam(f.yearFrom);
@@ -263,6 +266,24 @@ export async function removeRemoteAlbumsFromPlaylist(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Delete
+// ---------------------------------------------------------------------------
+
+/**
+ * Remove a playlist from the server account.
+ *
+ * The server unfollows it on Spotify (which deletes it when the account owns
+ * it) and drops its cached albums, exactly like the local path, so the same
+ * "delete playlists" control works in both data-source modes.
+ */
+export async function deleteRemotePlaylist(base: string, playlistId: string): Promise<void> {
+  await apiFetch<unknown>(
+    base, `/api/v1/playlists/${encodeURIComponent(playlistId)}`, { method: 'DELETE' }
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Export (server-built CSV download)
 // ---------------------------------------------------------------------------
 
